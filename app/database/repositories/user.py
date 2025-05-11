@@ -177,16 +177,6 @@ class UserRepository:
         # Вернуть пользователя со всеми его трекерами (включая обновленный текущий)
         return await self.get_by_id_with_all_trackers(user_id)
 
-    async def set_superuser(
-        self, user_id: int, is_superuser: bool = True
-    ) -> User | None:
-        """Set the superuser status for a user"""
-        await self.session.execute(
-            update(User).where(User.id == user_id).values(is_superuser=is_superuser)
-        )
-        await self.session.commit()
-        return await self.get_by_id(user_id)
-
     async def get_user_role_for_tracker(
         self, user_id: int, tracker_id: int
     ) -> str | None:
@@ -206,3 +196,40 @@ class UserRepository:
         """Получить всех пользователей"""
         result = await self.session.execute(select(User))
         return result.scalars().all()
+        
+    async def remove_user_tracker_role(self, user_id: int, tracker_id: int) -> None:
+        """Удалить связь между пользователем и трекером"""
+        log.debug(f"Removing tracker role for user_id={user_id}, tracker_id={tracker_id}")
+        stmt = await self.session.execute(
+            select(UserTrackerRole).where(
+                UserTrackerRole.user_id == user_id,
+                UserTrackerRole.tracker_id == tracker_id,
+            )
+        )
+        user_tracker_role = stmt.scalar_one_or_none()
+        
+        if user_tracker_role:
+            await self.session.delete(user_tracker_role)
+            await self.session.commit()
+            log.info(f"Removed tracker role for user_id={user_id}, tracker_id={tracker_id}")
+        else:
+            log.warning(f"No tracker role found for user_id={user_id}, tracker_id={tracker_id}")
+
+    async def change_user_role(
+        self, user_id: int, tracker_id: int, new_role: RoleEnum
+    ) -> User | None:
+        """Изменить роль пользователя для указанного трекера"""
+        stmt = await self.session.execute(
+            select(UserTrackerRole).where(
+                UserTrackerRole.user_id == user_id,
+                UserTrackerRole.tracker_id == tracker_id,
+            )
+        )
+        user_tracker_role = stmt.scalar_one_or_none()
+
+        if user_tracker_role:
+            user_tracker_role.role = new_role
+            user_tracker_role.updated_at = datetime.utcnow()
+            await self.session.commit()
+            return user_tracker_role
+        return None

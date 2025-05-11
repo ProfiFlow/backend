@@ -9,11 +9,11 @@ from app.database import get_db
 from app.database.repositories.user import UserRepository
 from app.database.user import User
 from app.dependencies.auth import get_current_user
-from app.schemas.user import UserBaseResponse, UserResponse
+from app.schemas.user import UserBaseResponse
 from app.services.yandex_tracker import YandexTrackerService
 
 router = APIRouter(
-    prefix="/users",
+    prefix="/api/v1/users",
     tags=["users"],
 )
 
@@ -41,14 +41,18 @@ async def get_users(
     ]
 
     # Get current tracker for the current user
-    current_tracker_result = await user_repo.get_user_current_tracker(current_user_id)
-    if not current_tracker_result:
+    current_tracker, role = await user_repo.get_user_current_tracker(current_user_id)
+    if not current_tracker:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Пользователь не привязан к трекеру",
         )
-
-    current_tracker, _ = current_tracker_result
+    
+    if role != "manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для выполнения этой операции",
+        )
 
     # Create users that don't exist in our database
     for tracker_user in real_users:
@@ -56,7 +60,6 @@ async def get_users(
             # Extract required fields
             yandex_id = tracker_user.get("passportUid")
             email = tracker_user.get("email")
-            tracker_uid = tracker_user.get("trackerUid")
             login = tracker_user.get("login")
             first_name = tracker_user.get("firstName")
             last_name = tracker_user.get("lastName")
@@ -105,21 +108,94 @@ async def get_users(
         except Exception as e:
             log.error(f"Error processing user {tracker_user.get('display')}: {str(e)}")
 
-    # Get all users from database and convert to UserResponse objects
-    result = await session.execute(select(User))
-    users = result.scalars().all()
+        # Get all users from database and convert to UserResponse objects
+        result = await session.execute(select(User))
+        users = result.scalars().all()
 
-    # Convert SQLAlchemy User objects to Pydantic UserResponse objects
-    user_responses = []
-    for user in users:
-        user_response = UserBaseResponse(
-            id=user.id,
-            login=user.login,
-            email=user.email,
-            display_name=user.display_name,
-            first_name=user.first_name,
-            last_name=user.last_name,
-        )
-        user_responses.append(user_response)
+        # Convert SQLAlchemy User objects to Pydantic UserResponse objects
+        user_responses = []
+        for user in users:
+            user_response = UserBaseResponse(
+                id=user.id,
+                login=user.login,
+                email=user.email,
+                display_name=user.display_name,
+                first_name=user.first_name,
+                last_name=user.last_name,
+            )
+            user_responses.append(user_response)
 
     return user_responses
+
+@router.delete("/{user_id}")
+async def delete_user(
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
+):
+    """Delete a user by ID"""
+    log.debug(f"Deleting user with ID {user_id}")
+    user_repo = UserRepository(session)
+
+    # Check if the user exists
+    user = await user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    current_tracker, role = await user_repo.get_user_current_tracker(
+        current_user_id
+    )
+    if not current_tracker:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь не привязан к трекеру",
+        )
+
+    if role != "manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для выполнения этой операции",
+        )
+
+    # Delete the user
+    await user_repo.remove_user_tracker_role(user_id=user_id, tracker_id=current_tracker.id)
+    return {"detail": "User deleted successfully"}
+
+@router.post("/{user_id}")
+async def update_role(
+    user_id: int,
+    role: str,
+    session: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user),
+):
+    """Update a user's role"""
+    log.debug(f"Updating role for user with ID {user_id} to {role}")
+    user_repo = UserRepository(session)
+
+    # Check if the user exists
+    user = await user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    current_tracker, current_role = await user_repo.get_user_current_tracker(
+        current_user_id
+    )
+    if not current_tracker:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь не привязан к трекеру",
+        )
+
+    if current_role != "manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для выполнения этой операции",
+        )
+
+    # Update the user's role
+    await user_repo.change_user_role(user_id, current_tracker.id, role)
+    return {"detail": "User role updated successfully"}
