@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int
     refresh_token_expire_days: int
     yc_folder_id: str
+    yc_api_key: str | None = None
+    yc_iam_token: str | None = None
+    yc_gpt_model: str = "yandexgpt"
+    yc_gpt_version: str = "rc"
+    yc_gpt_temperature: float = 0.5
+    yc_gpt_max_tokens: int = 1000
 
     class Config:
         env_file = ".env"

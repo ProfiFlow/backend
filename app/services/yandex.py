@@ -250,6 +250,9 @@ class YandexService:
         """Получает пользователя и обновляет токен при необходимости"""
         try:
             user = await self.user_repo.get_by_id(user_id)
+            tracker = await self.user_repo.get_user_current_tracker(user_id)
+            if tracker:
+                user.org_id = tracker[0].yandex_org_id or tracker[0].yandex_cloud_id
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
