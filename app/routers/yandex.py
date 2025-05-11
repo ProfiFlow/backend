@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, Request, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from ..services.yandex import YandexService
 from ..dependencies import get_yandex_service, get_current_user
 from ..schemas.user import UserModel
 from ..schemas.task import TrackerData
 from ..utils.promt import generate_employee_analysis_prompt
-from ..services.token_manager import verify_token
 import logging
 
 log = logging.getLogger(__name__)
@@ -33,32 +32,6 @@ async def get_yandex_profile(user_id: int = Depends(get_current_user), service: 
         - Объект с данными профиля пользователя
     """
     user = await service.get_user_profile(int(user_id))
-    return user
-
-@router.get(    
-    "/set_org_id",
-    summary="Установить organization_id для пользователя",
-    response_description="Обновленный профиль пользователя",
-    responses={
-        200: {"description": "Organization ID успешно установлен"},
-        401: {"description": "Не авторизован"},
-        500: {"description": "Ошибка сервера"}
-    })
-async def get_yandex_profile(
-        organization_id: str,
-        user_id: int = Depends(get_current_user), 
-        service: YandexService = Depends(get_yandex_service)
-    ):
-    """
-    Устанавливает organization_id для текущего пользователя.
-    
-    Параметры:
-    - organization_id: Идентификатор организации в Яндекс.Трекере
-    
-    Возвращает:
-    - Обновленный профиль пользователя с установленным organization_id
-    """
-    user = await service.set_org_id(int(user_id), organization_id)
     return user
 
 @router.get("/users",
