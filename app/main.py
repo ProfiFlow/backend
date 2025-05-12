@@ -6,7 +6,7 @@ from fastapi.openapi.utils import get_openapi
 
 from app.routers import report
 
-from .routers import auth, profile, tracker, yandex, user
+from .routers import auth, profile, tracker, user
 
 # Конфигурация логирования
 dictConfig(
@@ -100,7 +100,6 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(yandex.router)
 app.include_router(tracker.router)
 app.include_router(profile.router)
 app.include_router(user.router)
