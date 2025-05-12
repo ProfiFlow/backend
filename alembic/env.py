@@ -14,6 +14,8 @@ from app.database import Base
 from app.database.tracker import *
 from app.database.user import *
 from app.database.user_tracker_role import *
+from app.database.models.report import *
+from app.database.models.team_report import *
 config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)

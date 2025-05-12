@@ -1,10 +1,8 @@
 from typing import List
 from datetime import date, datetime
 from pydantic import BaseModel
-
-class Recommendation(BaseModel):
-    title: str
-    text: str
+from app.schemas.team_report import MetricWithComparison
+from app.schemas.recommendation import Recommendation
 
 class SprintReport(BaseModel):
     user_id: int
@@ -12,13 +10,12 @@ class SprintReport(BaseModel):
     sprint_name: str
     sprint_start_date: date
     sprint_end_date: date
-    story_points_closed: int
-    tasks_completed: int
-    deadlines_missed: int
-    average_task_completion_time: float  # in hours
+    story_points_closed: MetricWithComparison
+    tasks_completed: MetricWithComparison
+    deadlines_missed: MetricWithComparison
+    average_task_completion_time: MetricWithComparison  # in hours
     activity_analysis: str | None
     recommendations: List[Recommendation] | None = []
 
 class SprintReportRequest(BaseModel):
-    user_id: int
     sprint_id: int 

@@ -13,6 +13,9 @@ from app.config import settings
 from app.schemas.yandex_tracker import Task
 from app.services import prompts
 from app.services.report_service import SprintStats 
+import logging
+
+log = logging.getLogger(__name__)
 
 # --- Pydantic models for LLM Responses ---
 class TextResponse(BaseModel):
@@ -27,6 +30,15 @@ class RatingResponse(BaseModel):
     """Pydantic model for employee rating and explanation, expecting {"rating": N, "explanation": "..."}."""
     rating: int = Field(ge=1, le=5, description="The numerical rating (1-5).")
     explanation: str = Field(description="The explanation for the rating.")
+
+class TeamRatingItem(BaseModel):
+    employee_id: str
+    rating: int = Field(ge=1, le=5)
+    rating_explanation: str
+
+class TeamRatingList(BaseModel):
+    ratings: List[TeamRatingItem]
+
 # --- End Pydantic models ---
 
 class YandexGPTMLService:
@@ -81,6 +93,7 @@ class YandexGPTMLService:
             configured_model = self.base_model.configure(response_format=response_model)
 
             # Use await with 'run'. Expect SDK to return a GPTModelResult object.
+            log.debug(f"Run configured model: {configured_model}")
             result = await configured_model.run(messages)
             
             # Validate the result structure and extract the text containing JSON
@@ -95,9 +108,11 @@ class YandexGPTMLService:
                  raise ConnectionError(f"Invalid or empty alternative in GPTModelResult. Alternative: {alternative}")
                  
             json_string = alternative.text
+            log.debug(f"JSON string: {json_string}")
 
             # Parse the extracted JSON string using the expected Pydantic model.
             parsed_response = response_model.parse_raw(json_string)
+            log.debug(f"Parsed response: {parsed_response}")
             return parsed_response
             
         except json.JSONDecodeError as jde:
@@ -137,14 +152,8 @@ class YandexGPTMLService:
             deadlines_missed=sprint_stats.deadlines_missed,
             average_task_completion_time=sprint_stats.average_completion_time
         )
-        try:
-             # Expect a Pydantic object matching TextResponse
-             response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=TextResponse)
-             return response_obj.text
-        except ConnectionError as e:
-            return f"Ошибка AI при анализе активности сотрудника: {e}"
-        except Exception as e:
-             return f"Неизвестная ошибка при анализе активности сотрудника: {e}"
+        response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=TextResponse)
+        return response_obj.text
 
     async def generate_employee_recommendations(self, tasks: List[Task], sprint_stats: SprintStats) -> List[Recommendation]:
         system_prompt = prompts.EMPLOYEE_RECOMMENDATIONS_SYSTEM
@@ -156,14 +165,8 @@ class YandexGPTMLService:
             average_task_completion_time=sprint_stats.average_completion_time,
         )
 
-        try:
-            response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RecommendationsResponse)
-            return response_obj.recommendations[:3] 
-        except ConnectionError as e: # Catch specific ConnectionError from helper
-            print("Error generating recommendations")
-            return [Recommendation(title="Ошибка генерации", text=f"Не удалось получить рекомендации от AI: {e}")]
-        except Exception as e: # Catch unexpected errors
-            return [Recommendation(title="Неизвестная ошибка", text="Произошла непредвиденная ошибка при генерации рекомендаций.")]
+        response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RecommendationsResponse)
+        return response_obj.recommendations[:3] 
 
 
     async def analyze_team_activity(self, tasks_by_employee: Dict[str, List[Dict[str, Any]]]) -> str:
@@ -178,16 +181,11 @@ class YandexGPTMLService:
             total_completed=total_completed,
             avg_completion_rate=avg_completion_rate
         )
-        try:
-            # Expect a Pydantic object matching TextResponse
-            response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=TextResponse)
-            return response_obj.text
-        except ConnectionError as e:
-             print(f"Error analyzing team activity: {e}")
-             return f"Ошибка AI при анализе командной активности: {e}"
-        except Exception as e: # Catch unexpected errors
-             print(f"Unexpected error analyzing team activity: {e}")
-             return f"Неизвестная ошибка при анализе командной активности: {e}"
+
+        # Expect a Pydantic object matching TextResponse
+        response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=TextResponse)
+        return response_obj.text
+
 
     async def generate_team_recommendations(self, team_sprint_stats: Dict[str, Any]) -> List[Recommendation]:
         system_prompt = prompts.TEAM_RECOMMENDATIONS_SYSTEM
@@ -199,17 +197,8 @@ class YandexGPTMLService:
             avg_task_completion_time=team_sprint_stats.get('avg_task_completion_time', 0)
         )
 
-        try:
-            # Expect a Pydantic object matching RecommendationsResponse
-            response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RecommendationsResponse)
-            return response_obj.recommendations[:3]
-        except ConnectionError as e:
-            print(f"Error generating team recommendations: {e}")
-            return [Recommendation(title="Ошибка генерации", text=f"Не удалось получить командные рекомендации от AI: {e}")]
-        except Exception as e: 
-            print(f"Unexpected error processing team recommendations: {e}")
-            return [Recommendation(title="Неизвестная ошибка", text="Произошла непредвиденная ошибка при генерации командных рекомендаций.")]
-
+        response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RecommendationsResponse)
+        return response_obj.recommendations[:3]
 
     async def rate_employee_performance(self, employee_id: str, sprint_stats: Dict[str, Any], tasks: List[Dict[str, Any]],
                                  previous_sprint_stats: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -230,18 +219,45 @@ class YandexGPTMLService:
             task_titles_str=task_titles_str
         )
         
-        try:
-            # Expect a Pydantic object matching RatingResponse
-            response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RatingResponse)
-            # Return dict matching expected format
-            return {
-                "rating": response_obj.rating,
-                "explanation": response_obj.explanation
-            }
-        except ConnectionError as e:
-            print(f"Error during performance rating for {employee_id}: {e}")
-            # Return default dict on error
-            return {"rating": 3, "explanation": f"Ошибка AI при оценке производительности: {e}"} 
-        except Exception as e:
-            print(f"Unexpected error during performance rating for {employee_id}: {e}")
-            return {"rating": 3, "explanation": "Неизвестная ошибка при обработке оценки AI."}
+        response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RatingResponse)
+        # Return dict matching expected format
+        return {
+            "rating": response_obj.rating,
+            "explanation": response_obj.explanation
+        }
+
+    async def rate_team_performance(
+        self,
+        current_user_id: int,
+        employee_stats: list[dict],
+        prev_employee_stats: list[dict] | None = None,
+    ) -> list[dict]:
+        """
+        Анализирует командные метрики и возвращает список рейтингов и объяснений для каждого сотрудника.
+        """
+        # Формируем блоки для промпта
+        def stats_block(stats_list):
+            lines = []
+            for emp in stats_list:
+                log.debug(f"Emp: {emp}")
+                lines.append(
+                    f"- {emp['employee_name']} (ID: {emp['employee_id']}): SP={emp['story_points_closed']['current']}, "
+                    f"Задачи={emp['tasks_completed']['current']}, Пропуски={emp['deadlines_missed']['current']}, "
+                    f"Ср.Время={emp['average_task_completion_time']['current']}"
+                )
+            return '\n'.join(lines)
+        employee_stats_block = stats_block(employee_stats)
+        prev_employee_stats_block = stats_block(prev_employee_stats) if prev_employee_stats else "нет данных"
+        log.debug(f"Employee stats block: {employee_stats_block}")
+        log.debug(f"Prev employee stats block: {prev_employee_stats_block}")
+        system_prompt = prompts.TEAM_RATING_SYSTEM
+        log.debug(f"System prompt: {system_prompt}")
+        user_prompt = prompts.TEAM_RATING_USER.format(
+            employee_stats_block=employee_stats_block,
+            prev_employee_stats_block=prev_employee_stats_block
+        )
+        log.debug("!!!!!!")
+        log.debug(f"User prompt: {user_prompt}")
+        llm_response: TeamRatingList = await self._call_llm_structured(system_prompt, user_prompt, response_model=TeamRatingList)
+        log.debug(f"LLM response: {llm_response}")
+        return [item.model_dump() for item in llm_response.ratings]

@@ -233,3 +233,13 @@ class UserRepository:
             await self.session.commit()
             return user_tracker_role
         return None
+
+    async def get_users_for_tracker(self, tracker_id: int) -> list[User]:
+        """Получить всех пользователей, у которых текущий трекер — tracker_id"""
+        result = await self.session.execute(
+            select(User)
+            .join(UserTrackerRole, User.id == UserTrackerRole.user_id)
+            .where(UserTrackerRole.tracker_id == tracker_id)
+            .where(UserTrackerRole.is_current.is_(True))
+        )
+        return result.scalars().all()
