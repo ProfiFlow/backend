@@ -34,13 +34,10 @@ async def generate_sprint_report(
         )
         return report
     except ValueError as e:
-        # Catch specific errors (like employee/sprint not found from mock service)
         raise HTTPException(status_code=404, detail=str(e))
     except ConnectionError as e:
-        # Catch potential API connection errors from YandexGPT service
         raise HTTPException(status_code=503, detail=f"ML Service unavailable: {e}")
     except Exception as e:
-        # General fallback
         print(f"Error generating sprint report: {e}") # Log the error
         raise HTTPException(status_code=500, detail="Failed to generate report due to an internal error.")
 

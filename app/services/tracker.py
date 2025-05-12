@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.repositories.tracker import TrackerRepository
 from app.database.repositories.user import UserRepository
-from app.database.user import User
 
 log = logging.getLogger(__name__)
 

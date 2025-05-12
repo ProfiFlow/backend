@@ -9,7 +9,12 @@ EMPLOYEE_ACTIVITY_SYSTEM = (
 )
 
 EMPLOYEE_ACTIVITY_USER = (
-    "Проанализируй активность сотрудника {employee_id} на основе следующих задач за спринт:\n{task_descriptions}"
+    "Проанализируй активность сотрудника на основе следующих задач за спринт:\n{task_descriptions}.\n\nМетрики спринта:\n"
+    "- Закрыто Story Points: {story_points_closed}\n"
+    "- Завершено задач: {tasks_completed}\n"
+    "- Пропущено дедлайнов: {deadlines_missed}\n"
+    "- Среднее время выполнения задачи: {average_task_completion_time:.2f}ч\n\n"
+    "Ответ должен быть кратким и содержать только анализ. Не добавляй никакого другого текста."
 )
 
 # === Employee Recommendations ===
@@ -20,12 +25,11 @@ EMPLOYEE_RECOMMENDATIONS_SYSTEM = (
 )
 
 EMPLOYEE_RECOMMENDATIONS_USER = (
-    "Сгенерируй до 3х рекомендаций для сотрудника {employee_id} на основе следующих метрик спринта:\n"
+    "Сгенерируй до 3х рекомендаций для сотрудника на основе следующих метрик спринта:\n"
     "- Закрыто Story Points: {story_points_closed}\n"
     "- Завершено задач: {tasks_completed}\n"
     "- Пропущено дедлайнов: {deadlines_missed}\n"
     "- Среднее время выполнения задачи: {average_task_completion_time:.2f}ч\n\n"
-    "Список завершенных задач:\n{task_titles_str}\n\n"
     "Ответ должен быть строго в формате JSON списка: [{{'title': 'Заголовок1', 'text': 'Текст1'}}, ...]. "
     "Не добавляй никакого другого текста."
 )

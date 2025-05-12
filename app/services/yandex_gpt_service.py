@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field, ValidationError
 from app.schemas.sprint_report import Recommendation
 from app.config import settings
 # Import prompt templates
-from app.services import prompts 
+from app.schemas.yandex_tracker import Task
+from app.services import prompts
+from app.services.report_service import SprintStats 
 
 # --- Pydantic models for LLM Responses ---
 class TextResponse(BaseModel):
@@ -49,7 +51,7 @@ class YandexGPTMLService:
 
         try:
             # Initialize AsyncYCloudML for asynchronous operations
-            self.sdk = AsyncYCloudML(folder_id=settings.YC_FOLDER_ID, auth=auth_param)
+            self.sdk = AsyncYCloudML(folder_id=settings.yc_folder_id, auth=auth_param)
             # Get the base model object. Specific configuration (like response_format) 
             # will be applied per-request in the helper method.
             self.base_model = self.sdk.models.completions(settings.yc_gpt_model, model_version=settings.yc_gpt_version).configure(
@@ -124,59 +126,43 @@ class YandexGPTMLService:
 
     # --- Methods implementing BaseMLService interface using _call_llm_structured ---
     
-    async def analyze_employee_activity(self, employee_id: str, tasks: List[Dict[str, Any]]) -> str:
+    async def analyze_employee_activity(self, tasks: list[Task], sprint_stats: SprintStats) -> str:
         system_prompt = prompts.EMPLOYEE_ACTIVITY_SYSTEM
-        
-        task_descriptions = []
-        for task in tasks:
-            status = "Завершена" if task.get('is_completed') else "Не завершена"
-            details = f" - {task.get('title', 'Без названия')} ({status})"
-            if task.get('is_completed'):
-                details += f", SP: {task.get('story_points', 0)}, Время: {task.get('completion_time', 0)}ч"
-                if task.get('deadline_missed'):
-                    details += ", Дедлайн пропущен"
-            task_descriptions.append(details)
-        
+        task_descriptions = [f"Summary: {task.summary}. Status: {task.status.key}" for task in tasks]
+        task_descriptions_str = "\n".join(task_descriptions) or "Нет задач для анализа."
         user_prompt = prompts.EMPLOYEE_ACTIVITY_USER.format(
-            employee_id=employee_id, 
-            task_descriptions="\n".join(task_descriptions)
+            task_descriptions=task_descriptions_str,
+            story_points_closed=sprint_stats.total_story_points,
+            tasks_completed=sprint_stats.total_tasks,
+            deadlines_missed=sprint_stats.deadlines_missed,
+            average_task_completion_time=sprint_stats.average_completion_time
         )
         try:
              # Expect a Pydantic object matching TextResponse
              response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=TextResponse)
              return response_obj.text
         except ConnectionError as e:
-             print(f"Error analyzing employee activity for {employee_id}: {e}")
-             return f"Ошибка AI при анализе активности сотрудника {employee_id}: {e}"
-        except Exception as e: # Catch unexpected errors during analysis call
-             print(f"Unexpected error analyzing employee activity for {employee_id}: {e}")
-             return f"Неизвестная ошибка при анализе активности сотрудника {employee_id}: {e}"
+            return f"Ошибка AI при анализе активности сотрудника: {e}"
+        except Exception as e:
+             return f"Неизвестная ошибка при анализе активности сотрудника: {e}"
 
-    async def generate_recommendations(self, employee_id: str, sprint_stats: Dict[str, Any], tasks: List[Dict[str, Any]]) -> List[Recommendation]:
+    async def generate_employee_recommendations(self, tasks: List[Task], sprint_stats: SprintStats) -> List[Recommendation]:
         system_prompt = prompts.EMPLOYEE_RECOMMENDATIONS_SYSTEM
-        
-        completed_task_titles = [t.get('title', 'Без названия') for t in tasks if t.get('is_completed')]
-        task_titles_str = "\n".join([f"- {title}" for title in completed_task_titles]) or "Завершенных задач нет."
-        
+                
         user_prompt = prompts.EMPLOYEE_RECOMMENDATIONS_USER.format(
-            employee_id=employee_id,
-            story_points_closed=sprint_stats.get('story_points_closed', 0),
-            tasks_completed=sprint_stats.get('tasks_completed', 0),
-            deadlines_missed=sprint_stats.get('deadlines_missed', 0),
-            average_task_completion_time=sprint_stats.get('average_task_completion_time', 0),
-            task_titles_str=task_titles_str
+            story_points_closed=sprint_stats.total_story_points,
+            tasks_completed=sprint_stats.total_tasks,
+            deadlines_missed=sprint_stats.deadlines_missed,
+            average_task_completion_time=sprint_stats.average_completion_time,
         )
 
         try:
-            # Expect a Pydantic object matching RecommendationsResponse
             response_obj = await self._call_llm_structured(system_prompt, user_prompt, response_model=RecommendationsResponse)
-            # Limit to 3 recommendations as before
             return response_obj.recommendations[:3] 
         except ConnectionError as e: # Catch specific ConnectionError from helper
-            print(f"Error generating recommendations for {employee_id}: {e}")
+            print("Error generating recommendations")
             return [Recommendation(title="Ошибка генерации", text=f"Не удалось получить рекомендации от AI: {e}")]
         except Exception as e: # Catch unexpected errors
-            print(f"Unexpected error processing recommendations for {employee_id}: {e}")
             return [Recommendation(title="Неизвестная ошибка", text="Произошла непредвиденная ошибка при генерации рекомендаций.")]
 
 

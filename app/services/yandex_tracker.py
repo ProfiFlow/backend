@@ -269,7 +269,6 @@ class YandexTrackerService:
                     if hasattr(duration_obj, 'total_seconds'):
                         seconds = duration_obj.total_seconds()
                     else:
-                        # For Duration objects, we need to approximate
                         seconds = duration_obj.days * 24 * 3600 + duration_obj.seconds
                     
                     total_seconds += seconds

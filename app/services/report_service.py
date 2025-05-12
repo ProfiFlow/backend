@@ -2,13 +2,16 @@ from datetime import date, datetime
 from multiprocessing import process
 from time import timezone
 from typing import Optional, Dict, List, Any, Type
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.repositories.user import UserRepository
 from app.database.user import User
+from app.schemas.report import SprintStats
 from app.schemas.sprint_report import SprintReport
 from app.schemas.yandex_tracker import Task
 from app.schemas.team_report import TeamSprintReport, EmployeeSprintStats, MetricWithComparison
+from app.services.yandex_gpt_service import YandexGPTMLService
 from app.services.yandex_tracker import YandexTrackerService
 import logging
 
@@ -34,6 +37,7 @@ class ReportService:
         """
         # Get employee information
         yandex_tracker_service = YandexTrackerService(db)
+        yandex_gpt_service = YandexGPTMLService()
 
         sprint = await yandex_tracker_service.get_sprint(sprint_id, current_user_id)
         if not sprint:
@@ -43,9 +47,13 @@ class ReportService:
 
         sprint_stats = await self._process_tasks(tasks, yandex_tracker_service)
         
-        activity_analysis = None
+        activity_analysis = await yandex_gpt_service.analyze_employee_activity(
+            tasks, sprint_stats
+        )
         
-        recommendations = None
+        recommendations = await yandex_gpt_service.generate_employee_recommendations(
+            tasks, sprint_stats
+        )
         
         return SprintReport(
             user_id=user.id,
@@ -53,10 +61,10 @@ class ReportService:
             sprint_name=sprint.name,
             sprint_start_date=sprint.start_date,
             sprint_end_date=sprint.end_date,
-            story_points_closed=sprint_stats["total_story_points"],
-            tasks_completed=sprint_stats["total_tasks"],
-            deadlines_missed=sprint_stats["deadlines_missed"],
-            average_task_completion_time=sprint_stats["average_completion_time"],
+            story_points_closed=sprint_stats.total_story_points,
+            tasks_completed=sprint_stats.total_tasks,
+            deadlines_missed=sprint_stats.deadlines_missed,
+            average_task_completion_time=sprint_stats.average_completion_time,
             activity_analysis=activity_analysis,
             recommendations=recommendations,
         )
@@ -183,7 +191,7 @@ class ReportService:
     #         employee_stats=employee_stats
     #     ) 
 
-    async def _process_tasks(self, tasks: List[Task], yandex_tracker_service: YandexTrackerService) -> Dict[str, Any]:
+    async def _process_tasks(self, tasks: List[Task], yandex_tracker_service: YandexTrackerService) -> SprintStats:
         """
         Process tasks to extract relevant statistics.
         """
@@ -204,9 +212,9 @@ class ReportService:
                     task.id
                 )
         
-        return {
-            "total_story_points": total_story_points,
-            "total_tasks": total_tasks,
-            "deadlines_missed": deadlines_missed,
-            "average_completion_time": total_completion_time / total_tasks if total_tasks > 0 else 0
-        }
+        return SprintStats(
+            total_story_points=total_story_points,
+            total_tasks=total_tasks,
+            deadlines_missed=deadlines_missed,
+            average_completion_time=total_completion_time / total_tasks if total_tasks > 0 else 0
+        )
