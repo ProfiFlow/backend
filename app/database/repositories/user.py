@@ -243,3 +243,10 @@ class UserRepository:
             .where(UserTrackerRole.is_current.is_(True))
         )
         return result.scalars().all()
+
+    async def create_user(self, user: User) -> User:
+        """Создать нового пользователя"""
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user

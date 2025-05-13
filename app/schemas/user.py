@@ -57,3 +57,8 @@ class UserResponse(UserBaseResponse):
     current_tracker: Optional[TrackerResponse] = None
     trackers: List[TrackerResponse] = []
     is_active: bool
+
+
+class RoleUpdateRequest(BaseModel):
+    """Схема для запроса на обновление роли пользователя"""
+    role: str = Field(..., description="Роль пользователя (manager или employee)")

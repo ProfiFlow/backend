@@ -1,5 +1,4 @@
 from datetime import datetime
-import traceback
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,11 +9,11 @@ from app.schemas.sprint_report import SprintReport
 from app.schemas.yandex_tracker import Task
 from app.schemas.team_report import EmployeeSprintStats, TeamSprintReport, MetricWithComparison
 from app.schemas.yandex_tracker import Sprint as SprintSchema
-from app.services.yandex_gpt_service import YandexGPTMLService
-from app.services.yandex_tracker import YandexTrackerService
 from app.database.repositories.report import ReportRepository, TeamReportRepository
 import logging
-from fastapi import HTTPException
+
+from app.services.yandex_gpt_service import YandexGPTMLService
+from app.services.yandex_tracker import YandexTrackerService
 
 log = logging.getLogger(__name__)
 
@@ -24,10 +23,23 @@ class ReportService:
     Service for generating various types of reports.
     Relies on injected tracker and ML services.
     """
+    def __init__(self, db: AsyncSession, 
+                yandex_tracker_service: YandexTrackerService, 
+                yandex_gpt_service: YandexGPTMLService,
+                user_repo: UserRepository,
+                report_repo: ReportRepository,
+                team_report_repo: TeamReportRepository,
+            ):
+        self.db = db
+        self.yandex_tracker_service = yandex_tracker_service
+        self.yandex_gpt_service = yandex_gpt_service
+        self.user_repo = user_repo
+        self.report_repo = report_repo
+        self.team_report_repo = team_report_repo
+
     
     async def generate_sprint_report(
         self,
-        db: AsyncSession,
         user: User,
         sprint_id: int,
         current_user_id: int,
@@ -36,30 +48,26 @@ class ReportService:
         Generate a comprehensive sprint report for an employee.
         Uses provided service instances.
         """
-        yandex_tracker_service = YandexTrackerService(db)
-        yandex_gpt_service = YandexGPTMLService()
-        user_repo = UserRepository(db)
-        report_repo = ReportRepository(db)
 
-        sprint = await yandex_tracker_service.get_sprint(sprint_id, current_user_id)
+        sprint = await self.yandex_tracker_service.get_sprint(sprint_id, current_user_id)
         if not sprint:
             raise ValueError(f"Sprint with ID {sprint_id} not found.")
 
         # Получаем tracker_id через репозиторий
-        tracker_info = await user_repo.get_user_current_tracker(user.id)
+        tracker_info = await self.user_repo.get_user_current_tracker(user.id)
         if not tracker_info:
             raise ValueError("Не удалось определить tracker_id для пользователя")
         tracker, _ = tracker_info
         tracker_id = tracker.id
 
-        tasks = await yandex_tracker_service.get_sprint_tasks(sprint_id, current_user_id, user.login)
-        sprint_stats = await self._process_tasks(tasks, yandex_tracker_service, current_user_id)
+        tasks = await self.yandex_tracker_service.get_sprint_tasks(sprint_id, current_user_id, user.login)
+        sprint_stats = await self._process_tasks(tasks, current_user_id)
 
         # Проверяем, есть ли уже отчет по этому спринту
-        existing_report = await report_repo.get_sprint_report_by_id(user.id, tracker_id, sprint_id)
+        existing_report = await self.report_repo.get_sprint_report_by_id(user.id, tracker_id, sprint_id)
         if existing_report:
             # Получаем предыдущий отчет для сравнения
-            prev_report = await report_repo.get_previous_sprint_report(user.id, tracker_id, existing_report.sprint_start_date)
+            prev_report = await self.report_repo.get_previous_sprint_report(user.id, tracker_id, existing_report.sprint_start_date)
             prev_stats = None
             if prev_report:
                 prev_stats = SprintStats(
@@ -91,7 +99,7 @@ class ReportService:
             )
 
         # --- Получение предыдущего отчета из БД ---
-        prev_report = await report_repo.get_previous_sprint_report(user.id, tracker_id, sprint.start_date)
+        prev_report = await self.report_repo.get_previous_sprint_report(user.id, tracker_id, sprint.start_date)
         prev_stats = None
         if prev_report:
             prev_stats = SprintStats(
@@ -115,14 +123,14 @@ class ReportService:
         )
 
         try:
-            activity_analysis = await yandex_gpt_service.analyze_employee_activity(tasks, sprint_stats)
-            recommendations = await yandex_gpt_service.generate_employee_recommendations(tasks, sprint_stats)
+            activity_analysis = await self.yandex_gpt_service.analyze_employee_activity(tasks, sprint_stats)
+            recommendations = await self.yandex_gpt_service.generate_employee_recommendations(tasks, sprint_stats)
         except Exception as e:
             log.error(f"LLM error: {e}")
             raise
 
         # Сохраняем и возвращаем отчет только если оба результата получены
-        await report_repo.save_or_update_sprint_report(
+        await self.report_repo.save_or_update_sprint_report(
             user_id=user.id,
             tracker_id=tracker_id,
             sprint_id=sprint_id,
@@ -174,7 +182,6 @@ class ReportService:
     
     async def   generate_team_sprint_report(
         self,
-        db: AsyncSession,
         current_user_id: int,
         sprint_id: int,
     ) -> TeamSprintReport:
@@ -182,14 +189,9 @@ class ReportService:
         Generate a comprehensive sprint report for the entire team.
         Uses provided service instances.
         """
-        yandex_tracker_service = YandexTrackerService(db)
-        yandex_gpt_service = YandexGPTMLService()
-        user_repo = UserRepository(db)
-        report_repo = ReportRepository(db)
-        team_report_repo = TeamReportRepository(db)
 
         # Получаем текущий трекер пользователя
-        tracker_info = await user_repo.get_user_current_tracker(current_user_id)
+        tracker_info = await self.user_repo.get_user_current_tracker(current_user_id)
         if not tracker_info:
             raise ValueError("Не удалось определить tracker_id для пользователя")
         tracker, role = tracker_info
@@ -200,7 +202,7 @@ class ReportService:
         tracker_id = tracker.id
 
         # --- Проверка наличия отчёта в БД ---
-        existing_team_report = await team_report_repo.get_team_sprint_report_by_id(tracker_id, sprint_id)
+        existing_team_report = await self.team_report_repo.get_team_sprint_report_by_id(tracker_id, sprint_id)
         if existing_team_report:
             employee_stats_final = [
                 EmployeeSprintStats(**emp) for emp in existing_team_report.employee_stats
@@ -213,16 +215,16 @@ class ReportService:
             )
 
         # Получаем всех пользователей, привязанных к этому трекеру
-        users = await user_repo.get_users_for_tracker(tracker_id)
+        users = await self.user_repo.get_users_for_tracker(tracker_id)
 
         # Получаем инфо о спринте
-        sprint = await yandex_tracker_service.get_sprint(sprint_id, current_user_id)
+        sprint = await self.yandex_tracker_service.get_sprint(sprint_id, current_user_id)
         if not sprint:
             raise ValueError(f"Sprint with ID {sprint_id} not found.")
 
         # Получаем предыдущий спринт (по дате)
         prev_sprint = None
-        all_sprints = await yandex_tracker_service.get_sprints(current_user_id)
+        all_sprints = await self.yandex_tracker_service.get_sprints(current_user_id)
         sprints_objs = [SprintSchema(**s) for s in all_sprints]
         sprints_sorted = sorted(sprints_objs, key=lambda s: s.start_date)
         for idx, s in enumerate(sprints_sorted):
@@ -235,7 +237,7 @@ class ReportService:
         prev_employee_stats = []
         for user in users:
             # --- Переиспользуем generate_sprint_report для каждого пользователя ---
-            sprint_report = await self.generate_sprint_report(db, user, sprint_id, current_user_id)
+            sprint_report = await self.generate_sprint_report(user, sprint_id, current_user_id)
             # Метрики с сравнением (будут использоваться ниже)
             story_points_closed = sprint_report.story_points_closed
             tasks_completed = sprint_report.tasks_completed
@@ -254,7 +256,7 @@ class ReportService:
             # Метрики за предыдущий спринт — только из БД
             prev_stats_report = None
             if prev_sprint:
-                prev_stats_report = await report_repo.get_sprint_report_by_id(user.id, tracker_id, prev_sprint.id)
+                prev_stats_report = await self.report_repo.get_sprint_report_by_id(user.id, tracker_id, prev_sprint.id)
             if prev_stats_report:
                 prev_employee_stats.append({
                     "employee_id": str(user.id),
@@ -268,7 +270,7 @@ class ReportService:
         # Отправляем employee_stats и prev_employee_stats в LLM для анализа и рейтинга
         try:
             
-            llm_result = await yandex_gpt_service.rate_team_performance(
+            llm_result = await self.yandex_gpt_service.rate_team_performance(
                 current_user_id=current_user_id,
                 employee_stats=employee_stats,
                 prev_employee_stats=prev_employee_stats if prev_employee_stats else None
@@ -279,7 +281,6 @@ class ReportService:
         except Exception as e:
             log.error(f"LLM error (team report): {e}")
             raise e
-            rating_map = {}
 
         # Формируем финальный список EmployeeSprintStats
         employee_stats_final = []
@@ -301,7 +302,7 @@ class ReportService:
             ))
 
         # Сохраняем отчет
-        await team_report_repo.save_or_update_team_sprint_report(
+        await self.team_report_repo.save_or_update_team_sprint_report(
             tracker_id=tracker_id,
             sprint_id=sprint_id,
             sprint_start_date=sprint.start_date,
@@ -315,7 +316,7 @@ class ReportService:
             employee_stats=employee_stats_final,
         )
 
-    async def _process_tasks(self, tasks: List[Task], yandex_tracker_service: YandexTrackerService, current_user_id: int) -> SprintStats:
+    async def _process_tasks(self, tasks: List[Task], current_user_id: int) -> SprintStats:
         """
         Process tasks to extract relevant statistics.
         """
@@ -332,7 +333,7 @@ class ReportService:
                 deadlines_missed += 1
             
             if task.status.key == "done":
-                total_completion_time += await yandex_tracker_service.get_issue_logged_time(
+                total_completion_time += await self.yandex_tracker_service.get_issue_logged_time(
                     task.id, current_user_id
                 )
         

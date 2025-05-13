@@ -1,28 +1,21 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.api.deps import DB, CurrentUserId, TrackerRepo, UserRepo, get_user_repo, get_current_user_id, get_db
 from app.database.repositories.tracker import TrackerRepository
-from app.database.repositories.user import UserRepository
-from app.dependencies.auth import get_current_user
 from app.schemas.tracker import TrackerCreate, TrackerResponse
 
-router = APIRouter(
-    prefix="/trackers",
-    tags=["trackers"],
-)
+router = APIRouter()
 
 
 @router.get("", response_model=List[TrackerResponse])
 async def get_trackers(
-    session: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: CurrentUserId,
+    user_repo: UserRepo,
+    tracker_repo: TrackerRepo,
 ):
     """Get all available trackers"""
-    tracker_repo = TrackerRepository(session)
-    user_repo = UserRepository(session)
 
     # Get all trackers
     trackers = await tracker_repo.get_all()
@@ -30,7 +23,7 @@ async def get_trackers(
     # Prepare response with roles
     tracker_responses = []
     for tracker in trackers:
-        response = TrackerResponse.from_orm(tracker)
+        response = TrackerResponse.model_validate(tracker)
         # Get role for this tracker if exists
         role = await user_repo.get_user_role_for_tracker(current_user_id, tracker.id)
         response.role = role
@@ -42,14 +35,11 @@ async def get_trackers(
 @router.post("", response_model=TrackerResponse)
 async def create_tracker(
     tracker: TrackerCreate,
-    session: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(
-        get_current_user
-    ),  # Corrected: get_current_user returns user_id
+    current_user_id: CurrentUserId,
+    user_repo: UserRepo,
+    tracker_repo: TrackerRepo,
 ):
     """Add a new tracker and set the creator as manager and current user for this tracker."""
-    tracker_repo = TrackerRepository(session)
-    user_repo = UserRepository(session)
 
     # Check that at least one identifier is provided
     if not tracker.yandex_cloud_id and not tracker.yandex_org_id:
@@ -66,7 +56,7 @@ async def create_tracker(
 
     # Set the creator as manager and this tracker as their current one
     await user_repo.set_current_tracker(
-        user_id=current_user_id,  # Use current_user_id directly
+        user_id=current_user_id,
         tracker_id=new_tracker.id,
         role="manager",  # Set role to manager
     )
@@ -75,16 +65,11 @@ async def create_tracker(
 
 @router.get("/current", response_model=TrackerResponse)
 async def get_current_tracker(
-    session: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(
-        get_current_user
-    ),  # Corrected: get_current_user returns user_id
+    current_user_id: CurrentUserId,
+    user_repo: UserRepo,
 ):
     """Get the current user's active tracker"""
-    user_repo = UserRepository(session)
-    result = await user_repo.get_user_current_tracker(
-        current_user_id
-    )  # Use current_user_id directly
+    result = await user_repo.get_user_current_tracker(current_user_id)
 
     if not result:
         raise HTTPException(
@@ -93,7 +78,7 @@ async def get_current_tracker(
         )
 
     active_tracker, role = result
-    response = TrackerResponse.from_orm(active_tracker)
+    response = TrackerResponse.model_validate(active_tracker)
     response.role = role
 
     return response
@@ -102,14 +87,11 @@ async def get_current_tracker(
 @router.put("/current/{tracker_id}")
 async def set_current_tracker(
     tracker_id: int,
-    session: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(
-        get_current_user
-    ),  # Corrected: get_current_user returns user_id
+    current_user_id: CurrentUserId,
+    user_repo: UserRepo,
+    tracker_repo: TrackerRepo,
 ):
     """Set current tracker for the user. Default role is employee."""
-    tracker_repo = TrackerRepository(session)
-    user_repo = UserRepository(session)
 
     tracker_db = await tracker_repo.get_by_id(tracker_id)
     if not tracker_db:
@@ -118,7 +100,7 @@ async def set_current_tracker(
         )
 
     await user_repo.set_current_tracker(
-        user_id=current_user_id,  # Use current_user_id directly
+        user_id=current_user_id,
         tracker_id=tracker_db.id,
     )
 
@@ -126,7 +108,7 @@ async def set_current_tracker(
     role = await user_repo.get_user_role_for_tracker(current_user_id, tracker_db.id)
 
     # Create response with role information
-    tracker_response = TrackerResponse.from_orm(tracker_db)
+    tracker_response = TrackerResponse.model_validate(tracker_db)
     tracker_response.role = role
 
     return {
@@ -138,12 +120,11 @@ async def set_current_tracker(
 @router.get("/{tracker_id}", response_model=TrackerResponse)
 async def get_tracker(
     tracker_id: int,
-    session: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: CurrentUserId,
+    user_repo: UserRepo,
+    tracker_repo: TrackerRepo,
 ):
     """Get tracker by ID with user role information"""
-    tracker_repo = TrackerRepository(session)
-    user_repo = UserRepository(session)
 
     # Get the tracker
     tracker = await tracker_repo.get_by_id(tracker_id)
@@ -153,8 +134,8 @@ async def get_tracker(
         )
 
     # Get the user's role for this tracker
-    response = TrackerResponse.from_orm(tracker)
+    response = TrackerResponse.model_validate(tracker)
     role = await user_repo.get_user_role_for_tracker(current_user_id, tracker_id)
     response.role = role
 
-    return response
+    return response 

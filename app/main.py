@@ -4,9 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
-from app.routers import report
-
-from .routers import auth, profile, tracker, user
+from app.api.v1.router import api_router
+from app.config import settings
 
 # Конфигурация логирования
 dictConfig(
@@ -53,7 +52,11 @@ dictConfig(
     }
 )
 
-app = FastAPI()
+app = FastAPI(
+    title=settings.project_name,
+    description="Yandex Tracker Integration API",
+    version="1.0.0",
+)
 
 
 def custom_openapi():
@@ -61,7 +64,7 @@ def custom_openapi():
         return app.openapi_schema
 
     openapi_schema = get_openapi(
-        title="ProfiFlow",
+        title=settings.project_name,
         version="1.0.0",
         routes=app.routes,
     )
@@ -73,8 +76,9 @@ def custom_openapi():
 
     # Исключаем определённые пути из требования авторизации
     exclude_paths = [
-        "/api/auth/yandex/login",
-        "/api/auth/yandex/callback",
+        f"{settings.api_v1_str}/auth/yandex/login",
+        f"{settings.api_v1_str}/auth/yandex/callback",
+        f"{settings.api_v1_str}/health",
         "/docs",
         "/openapi.json",
     ]
@@ -93,18 +97,19 @@ app.openapi = custom_openapi
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(tracker.router)
-app.include_router(profile.router)
-app.include_router(user.router)
-app.include_router(report.router)
+app.include_router(api_router, prefix=settings.api_v1_str)
 
 @app.get("/")
 async def root():
-    return {"message": "Yandex Tracker Integration API"}
+    return {
+        "message": settings.project_name,
+        "documentation": "/docs",
+        "version": "1.0.0",
+        "api_version": "v1"
+    }

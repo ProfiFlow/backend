@@ -1,61 +1,42 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.database.repositories.user import UserRepository
-
-# Removed unused import
-from app.dependencies.auth import get_current_user
+from app.api.deps import CurrentUserId, UserRepo, get_user_repo, get_current_user_id, get_db
 from app.schemas.tracker import TrackerResponse
 from app.schemas.user import UserResponse
 
-router = APIRouter(
-    prefix="/api/profile",
-    tags=["profile"],
-)
+router = APIRouter()
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_my_profile(
-    session: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(
-        get_current_user
-    ),  # Corrected: get_current_user returns user_id
+    current_user_id: CurrentUserId,
+    user_repo: UserRepo,
 ):
     """Get current user's profile with tracker information"""
-    user_repo = UserRepository(session)
-
-    # Fetch the user with all their tracker associations
-    user_db = await user_repo.get_by_id_with_all_trackers(
-        current_user_id
-    )  # Use current_user_id directly
+    user_db = await user_repo.get_by_id_with_all_trackers(current_user_id)
 
     if not user_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    # Fetch the current active tracker separately
-    current_tracker_result = await user_repo.get_user_current_tracker(
-        current_user_id
-    )  # Use current_user_id directly
+    current_tracker_result = await user_repo.get_user_current_tracker(current_user_id)
 
-    # Prepare the list of all trackers for the response
     all_trackers_response = []
     if user_db.tracker_associations:
         for assoc in user_db.tracker_associations:
-            if assoc.tracker:  # Make sure tracker is loaded
-                tracker_response = TrackerResponse.from_orm(assoc.tracker)
+            if assoc.tracker:
+                tracker_response = TrackerResponse.model_validate(assoc.tracker)
                 tracker_response.role = (
                     assoc.role.value
-                )  # Add the user's role for this tracker
+                )
                 all_trackers_response.append(tracker_response)
 
     # Prepare the current tracker for the response
     current_tracker_response = None
     if current_tracker_result:
         current_tracker_db, role = current_tracker_result
-        current_tracker_response = TrackerResponse.from_orm(current_tracker_db)
+        current_tracker_response = TrackerResponse.model_validate(current_tracker_db)
         current_tracker_response.role = role  # Add the user's role
 
     # Construct the UserResponse
@@ -71,4 +52,4 @@ async def get_my_profile(
         is_active=user_db.is_active,
     )
 
-    return user_response
+    return user_response 

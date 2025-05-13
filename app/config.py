@@ -1,6 +1,13 @@
+from typing import List, Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    # Основные настройки API (с обратной совместимостью)
+    project_name: str = "ProfiFlow"
+    api_v1_str: str = "/api/v1"
+    cors_origins: List[str] = ["*"]
+    
+    # Стандартные настройки (нижний регистр для обратной совместимости)
     yandex_client_id: str
     yandex_client_secret: str
     yandex_redirect_uri: str

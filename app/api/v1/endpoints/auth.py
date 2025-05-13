@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import JWTError, jwt
-from ..services.yandex import YandexService
-from ..schemas.auth import YandexRefreshRequest, YandexTokenResponse
-from ..services.token_manager import verify_token, generate_access_jwt, generate_refresh_jwt
-from ..dependencies import get_yandex_service
+
+from app.api.deps import YandexSvc, get_yandex_service
+from app.schemas.auth import YandexRefreshRequest, YandexTokenResponse
+from app.services.token_manager import verify_token, generate_access_jwt, generate_refresh_jwt
+from jose import JWTError
+from jose.exceptions import ExpiredSignatureError
 import logging
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+from app.services.yandex import YandexService
+
 log = logging.getLogger(__name__)
+
+router = APIRouter()
 
 @router.get(
     "/yandex/login",
@@ -27,6 +31,7 @@ async def login_yandex():
     - Объект с URL для перенаправления на страницу авторизации Яндекс
     """
     try:
+        # Вызываем статический метод напрямую из класса
         auth_data = await YandexService.get_auth_url()
         return auth_data
     except Exception as e:
@@ -49,8 +54,8 @@ async def login_yandex():
 )
 async def auth_callback(
     code: str,
-    request: Request,    
-    service: YandexService = Depends(get_yandex_service),
+    request: Request,
+    auth_service: YandexSvc,
 ):
     """
     Обрабатывает callback от Яндекс OAuth после успешной авторизации.
@@ -68,7 +73,7 @@ async def auth_callback(
         user_agent = request.headers.get("user-agent", "unknown")
         log.debug(f"Request from IP: {client_ip}, UA: {user_agent}")
 
-        tokens = await service.handle_callback(code)
+        tokens = await auth_service.handle_callback(code)
         
         return {
             "status": "success",
@@ -128,7 +133,7 @@ async def refresh_token(request: YandexRefreshRequest):
             "refresh_token": refresh_token
         }
 
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has expired. Please log in again."
@@ -143,4 +148,4 @@ async def refresh_token(request: YandexRefreshRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during token refresh"
-        )
+        ) 
