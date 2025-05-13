@@ -7,12 +7,32 @@ from app.schemas.user import UserResponse
 router = APIRouter()
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me", 
+    response_model=UserResponse,
+    summary="Получить профиль текущего пользователя",
+    response_description="Информация о профиле пользователя и связанных трекерах",
+    responses={
+        200: {"description": "Профиль пользователя успешно получен"},
+        404: {"description": "Пользователь не найден"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def get_my_profile(
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
 ):
-    """Get current user's profile with tracker information"""
+    """
+    Получает профиль текущего авторизованного пользователя со всей информацией.
+    
+    Функция извлекает полную информацию о текущем пользователе, включая:
+    - Основные данные пользователя (ID, логин, email, имя и т.д.)
+    - Список всех трекеров, к которым имеет доступ пользователь, вместе с ролями
+    - Информацию о текущем активном трекере пользователя
+    
+    Возвращает:
+    - Полный профиль пользователя с информацией о всех связанных трекерах и ролях
+    """
     user_db = await user_repo.get_by_id_with_all_trackers(current_user_id)
 
     if not user_db:

@@ -13,13 +13,33 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 
-@router.get("", response_model=List[UserBaseResponse])
+@router.get(
+    "",
+    response_model=List[UserBaseResponse],
+    summary="Получить список всех пользователей",
+    response_description="Список пользователей",
+    responses={
+        200: {"description": "Список пользователей успешно получен"},
+        400: {"description": "Пользователь не привязан к трекеру"},
+        403: {"description": "Недостаточно прав для выполнения операции"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def get_users(
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
     tracker_service: TrackerSvc,
 ):
-    """Get all users"""
+    """
+    Получает список всех пользователей и синхронизирует их с Яндекс Трекером.
+    
+    Требуется роль менеджера. Функция получает список пользователей из Яндекс Трекера,
+    фильтрует пользователей-роботов и создает новые записи в базе данных для тех,
+    кто еще не существует в системе.
+    
+    Возвращает:
+    - Список всех пользователей с базовой информацией (ID, логин, email, отображаемое имя и т.д.)
+    """
     log.debug("Fetching all users")
 
     # Get users from Yandex Tracker
@@ -116,14 +136,37 @@ async def get_users(
     return user_responses
 
 
-@router.post("/{user_id}/role")
+@router.post(
+    "/{user_id}/role",
+    summary="Обновить роль пользователя",
+    response_description="Статус обновления роли",
+    responses={
+        200: {"description": "Роль пользователя успешно обновлена"},
+        400: {"description": "Неверная роль или неверный запрос"},
+        403: {"description": "Недостаточно прав для выполнения операции"},
+        404: {"description": "Пользователь не найден"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def update_role(
     user_id: int,
     request: RoleUpdateRequest,
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
 ):
-    """Update a user's role"""
+    """
+    Обновляет роль пользователя для текущего трекера.
+    
+    Требуется роль менеджера. Менеджер может изменять роли других пользователей,
+    но не может изменить свою собственную роль.
+    
+    Параметры:
+    - user_id: ID пользователя, чью роль нужно изменить
+    - request: Объект с новой ролью пользователя
+    
+    Возвращает:
+    - Объект с сообщением об успешном обновлении роли
+    """
     log.debug(f"Updating role for user with ID {user_id} to {request.role}")
 
     # Check if the user exists

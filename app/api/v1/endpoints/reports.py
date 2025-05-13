@@ -17,7 +17,18 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("", response_model=SprintReport)
+@router.post(
+    "",
+    response_model=SprintReport,
+    summary="Создать отчет по спринту для сотрудника",
+    response_description="Детальный отчет по спринту",
+    responses={
+        200: {"description": "Отчет успешно сгенерирован"},
+        404: {"description": "Спринт или пользователь не найден"},
+        500: {"description": "Ошибка сервера"},
+        503: {"description": "Сервис ML недоступен"},
+    },
+)
 async def generate_sprint_report(
     request: SprintReportRequest,
     reports: ReportSvc,
@@ -25,7 +36,21 @@ async def generate_sprint_report(
     user_repo: UserRepo,
 ):
     """
-    Generate a sprint report for an employee.
+    Генерирует детальный отчет по спринту для текущего пользователя.
+    
+    Функция создает отчет по работе пользователя в указанном спринте.
+    Обращается к сервису ML для анализа активности и формирования рекомендаций.
+    
+    Параметры:
+    - request: Объект запроса с ID спринта для генерации отчета
+    
+    Возвращает:
+    - Детальный отчет по спринту с анализом активности пользователя
+    
+    Исключения:
+    - 404: Если спринт или пользователь не найдены
+    - 503: Если сервис ML недоступен
+    - 500: При внутренних ошибках сервера
     """
     try:
         user = await user_repo.get_by_id(current_user_id)
@@ -55,14 +80,39 @@ async def generate_sprint_report(
         )
 
 
-@router.post("/team", response_model=TeamSprintReport)
+@router.post(
+    "/team",
+    response_model=TeamSprintReport,
+    summary="Создать командный отчет по спринту",
+    response_description="Детальный отчет по спринту для всей команды",
+    responses={
+        200: {"description": "Командный отчет успешно сгенерирован"},
+        403: {"description": "Недостаточно прав для создания командного отчета"},
+        500: {"description": "Ошибка сервера"},
+        503: {"description": "Сервис ML недоступен"},
+    },
+)
 async def generate_team_sprint_report(
     request: TeamSprintReportRequest,
     reports: ReportSvc,
     current_user_id: CurrentUserId,
 ) -> TeamSprintReport:
     """
-    Generate a sprint report for the entire team.
+    Генерирует командный отчет по спринту для всех участников команды.
+    
+    Функция создает агрегированный отчет по работе всей команды в указанном спринте.
+    Для выполнения операции требуется роль менеджера.
+    
+    Параметры:
+    - request: Объект запроса с ID спринта для генерации командного отчета
+    
+    Возвращает:
+    - Командный отчет по спринту с анализом активности всех участников
+    
+    Исключения:
+    - 403: Если у пользователя недостаточно прав (не менеджер)
+    - 503: Если сервис ML недоступен
+    - 500: При внутренних ошибках сервера
     """
     try:
         report = await reports.generate_team_sprint_report(
@@ -85,14 +135,34 @@ async def generate_team_sprint_report(
         )
 
 
-@router.get("/sprints", response_model=list[Sprint])
+@router.get(
+    "/sprints",
+    response_model=list[Sprint],
+    summary="Получить список спринтов текущего трекера",
+    response_description="Список спринтов",
+    responses={
+        200: {"description": "Список спринтов успешно получен"},
+        400: {"description": "Пользователь не привязан к трекеру"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def get_sprints_for_current_tracker(
     tracker_service: TrackerSvc,
     user_repo: UserRepo,
     current_user_id: CurrentUserId,
 ):
     """
-    Получить список спринтов текущего трекера пользователя
+    Получает список всех спринтов для текущего трекера пользователя.
+    
+    Функция извлекает список спринтов из текущего активного трекера пользователя.
+    Для работы функции пользователь должен иметь установленный текущий трекер.
+    
+    Возвращает:
+    - Список всех спринтов текущего трекера
+    
+    Исключения:
+    - 400: Если у пользователя не установлен текущий трекер
+    - 500: При внутренних ошибках сервера
     """
     tracker_info = await user_repo.get_user_current_tracker(current_user_id)
     if not tracker_info:

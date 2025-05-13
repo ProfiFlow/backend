@@ -8,14 +8,30 @@ from app.schemas.tracker import TrackerCreate, TrackerResponse
 router = APIRouter()
 
 
-@router.get("", response_model=List[TrackerResponse])
+@router.get(
+    "",
+    response_model=List[TrackerResponse],
+    summary="Получить список всех трекеров",
+    response_description="Список трекеров с информацией о ролях пользователя",
+    responses={
+        200: {"description": "Список трекеров успешно получен"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def get_trackers(
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
     tracker_repo: TrackerRepo,
 ):
-    """Get all available trackers"""
-
+    """
+    Получает список всех доступных трекеров с информацией о ролях текущего пользователя.
+    
+    Функция извлекает все трекеры из базы данных и добавляет к каждому из них 
+    информацию о роли текущего пользователя в этом трекере, если таковая имеется.
+    
+    Возвращает:
+    - Список всех трекеров с информацией о роли пользователя для каждого трекера
+    """
     # Get all trackers
     trackers = await tracker_repo.get_all()
 
@@ -31,15 +47,37 @@ async def get_trackers(
     return tracker_responses
 
 
-@router.post("", response_model=TrackerResponse)
+@router.post(
+    "",
+    response_model=TrackerResponse,
+    summary="Создать новый трекер",
+    response_description="Информация о созданном трекере",
+    responses={
+        200: {"description": "Трекер успешно создан"},
+        400: {"description": "Отсутствуют необходимые идентификаторы"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def create_tracker(
     tracker: TrackerCreate,
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
     tracker_repo: TrackerRepo,
 ):
-    """Add a new tracker and set the creator as manager and current user for this tracker."""
-
+    """
+    Создает новый трекер и назначает создателя менеджером этого трекера.
+    
+    Функция создает новый трекер в системе на основе предоставленных данных 
+    (имя, cloud_id, org_id) и автоматически назначает пользователя, создавшего 
+    трекер, менеджером этого трекера. Также этот трекер становится текущим 
+    для создавшего его пользователя.
+    
+    Параметры:
+    - tracker: Данные для создания трекера (имя, cloud_id, org_id)
+    
+    Возвращает:
+    - Информацию о созданном трекере
+    """
     # Check that at least one identifier is provided
     if not tracker.yandex_cloud_id and not tracker.yandex_org_id:
         raise HTTPException(
@@ -62,12 +100,31 @@ async def create_tracker(
     return new_tracker
 
 
-@router.get("/current", response_model=TrackerResponse)
+@router.get(
+    "/current",
+    response_model=TrackerResponse,
+    summary="Получить текущий трекер пользователя",
+    response_description="Информация о текущем активном трекере",
+    responses={
+        200: {"description": "Текущий трекер успешно получен"},
+        404: {"description": "Текущий трекер не найден"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def get_current_tracker(
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
 ):
-    """Get the current user's active tracker"""
+    """
+    Получает текущий активный трекер пользователя.
+    
+    Функция извлекает информацию о текущем выбранном трекере пользователя,
+    включая роль пользователя в этом трекере. Если у пользователя не установлен
+    текущий трекер, возвращается ошибка 404.
+    
+    Возвращает:
+    - Информацию о текущем активном трекере пользователя с указанием роли
+    """
     result = await user_repo.get_user_current_tracker(current_user_id)
 
     if not result:
@@ -83,15 +140,35 @@ async def get_current_tracker(
     return response
 
 
-@router.put("/current/{tracker_id}")
+@router.put(
+    "/current/{tracker_id}",
+    summary="Установить текущий трекер для пользователя",
+    response_description="Статус установки текущего трекера",
+    responses={
+        200: {"description": "Трекер успешно установлен как текущий"},
+        404: {"description": "Трекер не найден"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def set_current_tracker(
     tracker_id: int,
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
     tracker_repo: TrackerRepo,
 ):
-    """Set current tracker for the user. Default role is employee."""
-
+    """
+    Устанавливает указанный трекер как текущий для пользователя.
+    
+    Функция устанавливает указанный трекер как текущий активный для пользователя.
+    Если пользователь еще не имеет роли в этом трекере, ему будет назначена 
+    роль "employee" по умолчанию.
+    
+    Параметры:
+    - tracker_id: ID трекера, который нужно установить как текущий
+    
+    Возвращает:
+    - Объект с сообщением об успешной установке трекера и информацией о трекере
+    """
     tracker_db = await tracker_repo.get_by_id(tracker_id)
     if not tracker_db:
         raise HTTPException(
@@ -116,15 +193,35 @@ async def set_current_tracker(
     }
 
 
-@router.get("/{tracker_id}", response_model=TrackerResponse)
+@router.get(
+    "/{tracker_id}",
+    response_model=TrackerResponse,
+    summary="Получить трекер по ID",
+    response_description="Информация о трекере с ролью пользователя",
+    responses={
+        200: {"description": "Информация о трекере успешно получена"},
+        404: {"description": "Трекер не найден"},
+        500: {"description": "Ошибка сервера"},
+    },
+)
 async def get_tracker(
     tracker_id: int,
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
     tracker_repo: TrackerRepo,
 ):
-    """Get tracker by ID with user role information"""
-
+    """
+    Получает информацию о трекере по его ID.
+    
+    Функция извлекает данные о трекере с указанным ID и добавляет
+    информацию о роли текущего пользователя в этом трекере.
+    
+    Параметры:
+    - tracker_id: ID трекера для получения информации
+    
+    Возвращает:
+    - Информацию о трекере с ролью пользователя в нем
+    """
     # Get the tracker
     tracker = await tracker_repo.get_by_id(tracker_id)
     if not tracker:

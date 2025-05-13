@@ -54,8 +54,10 @@ dictConfig(
 
 app = FastAPI(
     title=settings.project_name,
-    description="Yandex Tracker Integration API",
+    description=f"API Backend for {settings.project_name}",
     version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 
@@ -69,7 +71,6 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Добавляем кнопку авторизации в Swagger
     openapi_schema["components"]["securitySchemes"] = {
         "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
     }
