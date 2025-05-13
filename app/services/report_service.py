@@ -61,7 +61,6 @@ class ReportService:
         if not sprint:
             raise ValueError(f"Sprint with ID {sprint_id} not found.")
 
-        # Получаем tracker_id через репозиторий
         tracker_info = await self.user_repo.get_user_current_tracker(user.id)
         if not tracker_info:
             raise ValueError("Не удалось определить tracker_id для пользователя")
@@ -73,12 +72,10 @@ class ReportService:
         )
         sprint_stats = await self._process_tasks(tasks, current_user_id)
 
-        # Проверяем, есть ли уже отчет по этому спринту
         existing_report = await self.report_repo.get_sprint_report_by_id(
             user.id, tracker_id, sprint_id
         )
         if existing_report:
-            # Получаем предыдущий отчет для сравнения
             prev_report = await self.report_repo.get_previous_sprint_report(
                 user.id, tracker_id, existing_report.sprint_start_date
             )
@@ -116,7 +113,6 @@ class ReportService:
                 recommendations=existing_report.recommendations,
             )
 
-        # --- Получение предыдущего отчета из БД ---
         prev_report = await self.report_repo.get_previous_sprint_report(
             user.id, tracker_id, sprint.start_date
         )
@@ -128,7 +124,6 @@ class ReportService:
                 deadlines_missed=prev_report.deadlines_missed,
                 average_completion_time=prev_report.average_task_completion_time,
             )
-        # --- Формируем сравнения метрик ---
         story_points_closed = self._create_metric_comparison(
             sprint_stats.total_story_points,
             prev_stats.total_story_points if prev_stats else None,
@@ -151,14 +146,13 @@ class ReportService:
             )
             recommendations = (
                 await self.yandex_gpt_service.generate_employee_recommendations(
-                    tasks, sprint_stats
+                    sprint_stats
                 )
             )
         except Exception as e:
             log.error(f"LLM error: {e}")
             raise
 
-        # Сохраняем и возвращаем отчет только если оба результата получены
         await self.report_repo.save_or_update_sprint_report(
             user_id=user.id,
             tracker_id=tracker_id,
@@ -232,7 +226,6 @@ class ReportService:
 
         tracker_id = tracker.id
 
-        # --- Проверка наличия отчёта в БД ---
         existing_team_report = await self.team_report_repo.get_team_sprint_report_by_id(
             tracker_id, sprint_id
         )
@@ -248,35 +241,29 @@ class ReportService:
                 employee_stats=employee_stats_final,
             )
 
-        # Получаем всех пользователей, привязанных к этому трекеру
         users = await self.user_repo.get_users_for_tracker(tracker_id)
 
-        # Получаем инфо о спринте
         sprint = await self.yandex_tracker_service.get_sprint(
             sprint_id, current_user_id
         )
         if not sprint:
             raise ValueError(f"Sprint with ID {sprint_id} not found.")
 
-        # Получаем предыдущий спринт (по дате)
         prev_sprint = None
         all_sprints = await self.yandex_tracker_service.get_sprints(current_user_id)
-        sprints_objs = [SprintSchema(**s) for s in all_sprints]
+        sprints_objs =  all_sprints
         sprints_sorted = sorted(sprints_objs, key=lambda s: s.start_date)
         for idx, s in enumerate(sprints_sorted):
             if s.id == sprint_id and idx > 0:
                 prev_sprint = sprints_sorted[idx - 1]
                 break
 
-        # Собираем employee_stats для текущего и предыдущего спринта
         employee_stats = []
         prev_employee_stats = []
         for user in users:
-            # --- Переиспользуем generate_sprint_report для каждого пользователя ---
             sprint_report = await self.generate_sprint_report(
                 user, sprint_id, current_user_id
             )
-            # Метрики с сравнением (будут использоваться ниже)
             story_points_closed = sprint_report.story_points_closed
             tasks_completed = sprint_report.tasks_completed
             deadlines_missed = sprint_report.deadlines_missed
@@ -293,7 +280,6 @@ class ReportService:
             )
 
             log.debug(f"Employee stats: {employee_stats}")
-            # Метрики за предыдущий спринт — только из БД
             prev_stats_report = None
             if prev_sprint:
                 prev_stats_report = await self.report_repo.get_sprint_report_by_id(
@@ -319,27 +305,20 @@ class ReportService:
                     }
                 )
 
-        # Отправляем employee_stats и prev_employee_stats в LLM для анализа и рейтинга
         try:
             llm_result = await self.yandex_gpt_service.rate_team_performance(
-                current_user_id=current_user_id,
                 employee_stats=employee_stats,
                 prev_employee_stats=(
                     prev_employee_stats if prev_employee_stats else None
                 ),
             )
-            log.debug(f"LLM result: {llm_result}")
-            # llm_result: List[dict] с rating и rating_explanation для каждого employee_id
             rating_map = {str(r["employee_id"]): r for r in llm_result}
         except Exception as e:
             log.error(f"LLM error (team report): {e}")
             raise e
 
-        # Формируем финальный список EmployeeSprintStats
         employee_stats_final = []
         for emp in employee_stats:
-            log.debug(f"Employee stats: {emp}")
-            log.debug(f"Rating map: {rating_map}")
             rid = emp["employee_id"]
             rating = rating_map.get(rid, {}).get("rating", 3)
             rating_explanation = rating_map.get(rid, {}).get(
@@ -362,7 +341,6 @@ class ReportService:
                 )
             )
 
-        # Сохраняем отчет
         await self.team_report_repo.save_or_update_team_sprint_report(
             tracker_id=tracker_id,
             sprint_id=sprint_id,

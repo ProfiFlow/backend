@@ -3,7 +3,6 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import (
-    DB,
     CurrentUserId,
     ReportSvc,
     TrackerSvc,
@@ -21,7 +20,6 @@ router = APIRouter()
 @router.post("", response_model=SprintReport)
 async def generate_sprint_report(
     request: SprintReportRequest,
-    db: DB,
     reports: ReportSvc,
     current_user_id: CurrentUserId,
     user_repo: UserRepo,
@@ -60,7 +58,6 @@ async def generate_sprint_report(
 @router.post("/team", response_model=TeamSprintReport)
 async def generate_team_sprint_report(
     request: TeamSprintReportRequest,
-    db: DB,
     reports: ReportSvc,
     current_user_id: CurrentUserId,
 ) -> TeamSprintReport:
