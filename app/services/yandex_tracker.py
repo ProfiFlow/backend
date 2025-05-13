@@ -1,22 +1,16 @@
-from ..schemas.yandex_tracker import Task
-import base64
 import logging
 from datetime import datetime, timedelta
 
 import httpx
 from fastapi import HTTPException, status
+from isodate import parse_duration
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.yandex import YandexIdInfo
 from app.schemas.yandex_tracker import Sprint
 
-from ..config import settings
 from ..database.repositories.user import UserRepository
 from ..database.user import User
-from ..schemas.auth import YandexTokenResponse
-from ..schemas.user import YandexUserInfo
-from .token_manager import generate_access_jwt, generate_refresh_jwt
-from isodate import parse_duration
+from ..schemas.yandex_tracker import Task
 
 log = logging.getLogger(__name__)
 
@@ -153,8 +147,8 @@ class YandexTrackerService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Ошибка при получении списка пользователей",
             )
-        
-    async def get_sprints(self, user_id: int):
+
+    async def get_sprints(self, user_id: int) -> list[Sprint]:
         """Получение списка спринтов трекера"""
         try:
             user = await self._get_user_with_valid_token(user_id)
@@ -163,12 +157,23 @@ class YandexTrackerService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Organization ID не установлен",
                 )
-            return await self._make_yandex_tracker_request(
+            sprints = await self._make_yandex_tracker_request(
                 "GET",
                 "https://api.tracker.yandex.net/v2/sprints",
                 user.yandex_token,
                 user.org_id,
             )
+            log.debug(f"Received sprints: {sprints}")
+            return [
+                Sprint(
+                    id=sprint.get("id"),
+                    name=sprint.get("name"),
+                    board=sprint.get("board", {}).get("display"),
+                    start_date=sprint.get("startDate"),
+                    end_date=sprint.get("endDate"),
+                )
+                for sprint in sprints
+            ]
         except HTTPException:
             raise
         except Exception as e:
@@ -178,7 +183,9 @@ class YandexTrackerService:
                 detail="Ошибка при получении списка спринтов",
             )
 
-    async def get_sprint_tasks(self, sprint_id: int, user_id: int, assignee_user_login: str) -> Task:
+    async def get_sprint_tasks(
+        self, sprint_id: int, user_id: int, assignee_user_login: str
+    ) -> Task:
         """Получение списка задач спринта"""
         try:
             user = await self._get_user_with_valid_token(user_id)
@@ -224,12 +231,19 @@ class YandexTrackerService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Organization ID не установлен",
                 )
-            return Sprint(**await self._make_yandex_tracker_request(
+            sprint = await self._make_yandex_tracker_request(
                 "GET",
                 f"https://api.tracker.yandex.net/v3/sprints/{sprint_id}",
                 user.yandex_token,
                 user.org_id,
-            ))
+            )
+            return Sprint(
+                id=sprint.get("id"),
+                name=sprint.get("name", {}),
+                board=sprint.get("board").get("display"),
+                start_date=sprint.get("startDate"),
+                end_date=sprint.get("endDate"),
+            )
         except HTTPException:
             raise
         except Exception as e:
@@ -238,10 +252,8 @@ class YandexTrackerService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Ошибка при получении информации о спринте",
             )
-        
-    async def get_issue_logged_time(
-        self, issue_id: str, user_id: int
-    ) -> float:
+
+    async def get_issue_logged_time(self, issue_id: str, user_id: int) -> float:
         """Получение информации о затраченном времени на задачу"""
         try:
             user = await self._get_user_with_valid_token(user_id)
@@ -256,25 +268,25 @@ class YandexTrackerService:
                 user.yandex_token,
                 user.org_id,
             )
-            
+
             total_seconds = 0
-            
+
             for entry in worklog_entries:
-                duration = entry.get('duration', '')
+                duration = entry.get("duration", "")
                 if not duration:
                     continue
-                
+
                 try:
                     duration_obj = parse_duration(duration)
-                    if hasattr(duration_obj, 'total_seconds'):
+                    if hasattr(duration_obj, "total_seconds"):
                         seconds = duration_obj.total_seconds()
                     else:
                         seconds = duration_obj.days * 24 * 3600 + duration_obj.seconds
-                    
+
                     total_seconds += seconds
                 except ValueError:
                     continue
-            
+
             total_hours = round(total_seconds / 3600, 1)
             return total_hours
         except HTTPException:

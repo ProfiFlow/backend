@@ -1,9 +1,8 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import DB, CurrentUserId, TrackerRepo, UserRepo, get_user_repo, get_current_user_id, get_db
-from app.database.repositories.tracker import TrackerRepository
+from app.api.deps import CurrentUserId, TrackerRepo, UserRepo
 from app.schemas.tracker import TrackerCreate, TrackerResponse
 
 router = APIRouter()
@@ -138,4 +137,4 @@ async def get_tracker(
     role = await user_repo.get_user_role_for_tracker(current_user_id, tracker_id)
     response.role = role
 
-    return response 
+    return response

@@ -1,14 +1,7 @@
 from datetime import datetime
 
 from pydantic import ValidationError, validate_email
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Integer,
-    String,
-    func,
-)
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, func
 from sqlalchemy.orm import relationship, validates
 
 from . import Base

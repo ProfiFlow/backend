@@ -1,14 +1,22 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-
-from app.api.deps import DB, CurrentUserId, ReportSvc, TrackerSvc, UserRepo, get_current_user_id, get_db, get_report_service, get_tracker_service, get_user_repo
-from app.database.user import User
-from app.schemas.sprint_report import SprintReportRequest, SprintReport
-from app.schemas.team_report import TeamSprintReportRequest, TeamSprintReport
 import logging
+
+from fastapi import APIRouter, HTTPException, status
+
+from app.api.deps import (
+    DB,
+    CurrentUserId,
+    ReportSvc,
+    TrackerSvc,
+    UserRepo,
+)
+from app.schemas.sprint_report import SprintReport, SprintReportRequest
+from app.schemas.team_report import TeamSprintReport, TeamSprintReportRequest
+from app.schemas.yandex_tracker import Sprint
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 @router.post("", response_model=SprintReport)
 async def generate_sprint_report(
@@ -24,8 +32,10 @@ async def generate_sprint_report(
     try:
         user = await user_repo.get_by_id(current_user_id)
         if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+            )
+
         report = await reports.generate_sprint_report(
             user=user,
             sprint_id=request.sprint_id,
@@ -35,10 +45,16 @@ async def generate_sprint_report(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"ML Service unavailable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"ML Service unavailable: {e}",
+        )
     except Exception as e:
         log.error(f"Error generating sprint report: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error generating report: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating report: {str(e)}",
+        )
 
 
 @router.post("/team", response_model=TeamSprintReport)
@@ -60,13 +76,19 @@ async def generate_team_sprint_report(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ConnectionError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"ML Service unavailable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"ML Service unavailable: {e}",
+        )
     except Exception as e:
         log.error(f"Error generating team sprint report: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate team report")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate team report",
+        )
 
 
-@router.get("/sprints")
+@router.get("/sprints", response_model=list[Sprint])
 async def get_sprints_for_current_tracker(
     tracker_service: TrackerSvc,
     user_repo: UserRepo,
@@ -77,7 +99,10 @@ async def get_sprints_for_current_tracker(
     """
     tracker_info = await user_repo.get_user_current_tracker(current_user_id)
     if not tracker_info:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пользователь не привязан к трекеру")
-    
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь не привязан к трекеру",
+        )
+
     sprints = await tracker_service.get_sprints(current_user_id)
-    return sprints 
+    return sprints

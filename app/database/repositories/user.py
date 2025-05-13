@@ -196,10 +196,12 @@ class UserRepository:
         """Получить всех пользователей"""
         result = await self.session.execute(select(User))
         return result.scalars().all()
-        
+
     async def remove_user_tracker_role(self, user_id: int, tracker_id: int) -> None:
         """Удалить связь между пользователем и трекером"""
-        log.debug(f"Removing tracker role for user_id={user_id}, tracker_id={tracker_id}")
+        log.debug(
+            f"Removing tracker role for user_id={user_id}, tracker_id={tracker_id}"
+        )
         stmt = await self.session.execute(
             select(UserTrackerRole).where(
                 UserTrackerRole.user_id == user_id,
@@ -207,13 +209,17 @@ class UserRepository:
             )
         )
         user_tracker_role = stmt.scalar_one_or_none()
-        
+
         if user_tracker_role:
             await self.session.delete(user_tracker_role)
             await self.session.commit()
-            log.info(f"Removed tracker role for user_id={user_id}, tracker_id={tracker_id}")
+            log.info(
+                f"Removed tracker role for user_id={user_id}, tracker_id={tracker_id}"
+            )
         else:
-            log.warning(f"No tracker role found for user_id={user_id}, tracker_id={tracker_id}")
+            log.warning(
+                f"No tracker role found for user_id={user_id}, tracker_id={tracker_id}"
+            )
 
     async def change_user_role(
         self, user_id: int, tracker_id: int, new_role: RoleEnum

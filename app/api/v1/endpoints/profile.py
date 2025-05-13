@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import CurrentUserId, UserRepo, get_user_repo, get_current_user_id, get_db
+from app.api.deps import CurrentUserId, UserRepo
 from app.schemas.tracker import TrackerResponse
 from app.schemas.user import UserResponse
 
@@ -27,9 +27,7 @@ async def get_my_profile(
         for assoc in user_db.tracker_associations:
             if assoc.tracker:
                 tracker_response = TrackerResponse.model_validate(assoc.tracker)
-                tracker_response.role = (
-                    assoc.role.value
-                )
+                tracker_response.role = assoc.role.value
                 all_trackers_response.append(tracker_response)
 
     # Prepare the current tracker for the response
@@ -52,4 +50,4 @@ async def get_my_profile(
         is_active=user_db.is_active,
     )
 
-    return user_response 
+    return user_response

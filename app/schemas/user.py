@@ -2,9 +2,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.database.user import User
-
-from .tracker import TrackerResponse
+from app.schemas.tracker import TrackerResponse
 
 
 class YandexUserInfo(BaseModel):
@@ -39,9 +37,6 @@ class UserModel(BaseModel):
     sources: List[str]
 
 
-from .tracker import TrackerResponse
-
-
 class UserBaseResponse(BaseModel):
     id: int
     login: Optional[str] = None
@@ -53,6 +48,7 @@ class UserBaseResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class UserResponse(UserBaseResponse):
     current_tracker: Optional[TrackerResponse] = None
     trackers: List[TrackerResponse] = []
@@ -61,4 +57,5 @@ class UserResponse(UserBaseResponse):
 
 class RoleUpdateRequest(BaseModel):
     """Схема для запроса на обновление роли пользователя"""
+
     role: str = Field(..., description="Роль пользователя (manager или employee)")

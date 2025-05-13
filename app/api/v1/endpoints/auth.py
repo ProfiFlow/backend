@@ -1,17 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-
-from app.api.deps import YandexSvc, get_yandex_service
-from app.schemas.auth import YandexRefreshRequest, YandexTokenResponse
-from app.services.token_manager import verify_token, generate_access_jwt, generate_refresh_jwt
-from jose import JWTError
-from jose.exceptions import ExpiredSignatureError
 import logging
 
+from fastapi import APIRouter, HTTPException, Request, status
+from jose import JWTError
+from jose.exceptions import ExpiredSignatureError
+
+from app.api.deps import YandexSvc
+from app.schemas.auth import YandexRefreshRequest, YandexTokenResponse
+from app.services.token_manager import (
+    generate_access_jwt,
+    generate_refresh_jwt,
+    verify_token,
+)
 from app.services.yandex import YandexService
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 @router.get(
     "/yandex/login",
@@ -20,13 +25,13 @@ router = APIRouter()
     responses={
         200: {"description": "URL для авторизации успешно получен"},
         400: {"description": "Ошибка инициализации OAuth"},
-        500: {"description": "Ошибка сервера"}
-    }
+        500: {"description": "Ошибка сервера"},
+    },
 )
 async def login_yandex():
     """
     Инициирует процесс OAuth-авторизации через Яндекс.
-    
+
     Возвращает:
     - Объект с URL для перенаправления на страницу авторизации Яндекс
     """
@@ -38,8 +43,9 @@ async def login_yandex():
         log.error(f"Yandex login error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to initiate Yandex OAuth"
+            detail="Failed to initiate Yandex OAuth",
         )
+
 
 @router.get(
     "/yandex/callback",
@@ -49,8 +55,8 @@ async def login_yandex():
         200: {"description": "Авторизация прошла успешно"},
         400: {"description": "Неверный код авторизации"},
         401: {"description": "Ошибка авторизации"},
-        500: {"description": "Ошибка сервера"}
-    }
+        500: {"description": "Ошибка сервера"},
+    },
 )
 async def auth_callback(
     code: str,
@@ -59,36 +65,34 @@ async def auth_callback(
 ):
     """
     Обрабатывает callback от Яндекс OAuth после успешной авторизации.
-    
+
     Параметры:
     - code: Временный код авторизации от Яндекс OAuth
-    
+
     Возвращает:
     - Объект с access и refresh токенами
     """
     try:
         log.debug(f"Processing callback with code: {code}")
-        
+
         client_ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
         log.debug(f"Request from IP: {client_ip}, UA: {user_agent}")
 
         tokens = await auth_service.handle_callback(code)
-        
-        return {
-            "status": "success",
-            "tokens": tokens
-        }
-        
+
+        return {"status": "success", "tokens": tokens}
+
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"Callback processing failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to process OAuth callback"
+            detail="Failed to process OAuth callback",
         )
-    
+
+
 @router.post(
     "/refresh",
     response_model=YandexTokenResponse,
@@ -99,53 +103,50 @@ async def auth_callback(
         400: {"description": "Неверные данные в токене"},
         401: {"description": "Токен истек"},
         403: {"description": "Недействительный токен"},
-        500: {"description": "Ошибка сервера"}
-    }
+        500: {"description": "Ошибка сервера"},
+    },
 )
 async def refresh_token(request: YandexRefreshRequest):
     """
     Обновляет access token с помощью valid refresh token.
-    
+
     Параметры:
     - refresh_token: Действительный refresh token
-    
+
     Возвращает:
     - Новые access и refresh токены
     """
     try:
         log.debug(f"refresh_token {request.refresh_token}")
         payload = verify_token(request.refresh_token)
-        
+
         user_id = payload.get("sub")
         yandex_id = payload.get("yandex_id")
 
         if not user_id or not yandex_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid token payload: missing required claims"
+                detail="Invalid token payload: missing required claims",
             )
 
         access_token = generate_access_jwt(user_id, yandex_id)
         refresh_token = generate_refresh_jwt(user_id, yandex_id)
 
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token
-        }
+        return {"access_token": access_token, "refresh_token": refresh_token}
 
     except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has expired. Please log in again."
+            detail="Refresh token has expired. Please log in again.",
         )
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Invalid refresh token: {str(e)}"
+            detail=f"Invalid refresh token: {str(e)}",
         )
     except Exception as e:
         log.error(f"Token refresh failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error during token refresh"
-        ) 
+            detail="Internal server error during token refresh",
+        )

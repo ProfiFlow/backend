@@ -1,8 +1,11 @@
+from datetime import date
 from typing import List
-from datetime import date, datetime
+
 from pydantic import BaseModel
-from app.schemas.team_report import MetricWithComparison
+
 from app.schemas.recommendation import Recommendation
+from app.schemas.team_report import MetricWithComparison
+
 
 class SprintReport(BaseModel):
     user_id: int
@@ -17,5 +20,6 @@ class SprintReport(BaseModel):
     activity_analysis: str | None
     recommendations: List[Recommendation] | None = []
 
+
 class SprintReportRequest(BaseModel):
-    sprint_id: int 
+    sprint_id: int

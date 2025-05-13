@@ -3,10 +3,10 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.deps import DB, CurrentUserId, TrackerSvc, UserRepo
+from app.api.deps import CurrentUserId, TrackerSvc, UserRepo
 from app.database.user import User
-from app.schemas.user import UserBaseResponse, RoleUpdateRequest
 from app.database.user_tracker_role import RoleEnum
+from app.schemas.user import RoleUpdateRequest, UserBaseResponse
 
 router = APIRouter()
 
@@ -39,7 +39,7 @@ async def get_users(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Пользователь не привязан к трекеру",
         )
-    
+
     if role != "manager":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -161,5 +161,5 @@ async def update_role(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {request.role}. Must be one of: {[r.value for r in RoleEnum]}"
-        ) 
+            detail=f"Invalid role: {request.role}. Must be one of: {[r.value for r in RoleEnum]}",
+        )

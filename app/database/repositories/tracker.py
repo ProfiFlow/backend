@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,9 +33,7 @@ class TrackerRepository:
 
     async def get_all(self) -> list[Tracker]:
         """Get all trackers"""
-        result = await self.session.execute(
-            select(Tracker).where(Tracker.is_active)
-        )
+        result = await self.session.execute(select(Tracker).where(Tracker.is_active))
         return result.scalars().all()
 
     async def create_or_update_yandex_tracker(

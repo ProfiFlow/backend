@@ -53,9 +53,7 @@ TEAM_ACTIVITY_SYSTEM = (
     "общей производительности команды, ключевых областей работы и возможных проблем."
 )
 
-TEAM_ACTIVITY_USER = (
-    "Проанализируй активность команды за спринт. Всего задач: {total_tasks}, завершено: {total_completed} ({avg_completion_rate:.1f}%)."
-)
+TEAM_ACTIVITY_USER = "Проанализируй активность команды за спринт. Всего задач: {total_tasks}, завершено: {total_completed} ({avg_completion_rate:.1f}%)."
 
 # === Team Recommendations ===
 TEAM_RECOMMENDATIONS_SYSTEM = (
@@ -82,4 +80,4 @@ TEAM_RATING_USER = (
     "Оцени работу каждого сотрудника команды.\n"
     "Данные по сотрудникам:\n{employee_stats_block}\n"
     "Если есть, данные по предыдущему спринту:\n{prev_employee_stats_block}\n"
-) 
+)

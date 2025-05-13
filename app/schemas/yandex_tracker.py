@@ -1,10 +1,13 @@
 from datetime import date, datetime
+
 from pydantic import BaseModel, Field
+
 
 class TaskStatus(BaseModel):
     id: str
     key: str
     display: str
+
 
 class Task(BaseModel):
     id: str
@@ -15,8 +18,10 @@ class Task(BaseModel):
     resolved_at: datetime | None = Field(alias="resolvedAt", default=None)
     status: TaskStatus
 
+
 class Sprint(BaseModel):
     id: int
     name: str
-    start_date: date = Field(format="%Y-%m-%d", alias="startDate")
-    end_date: date = Field(format="%Y-%m-%d", alias="endDate")
+    board: str
+    start_date: date = Field(format="%Y-%m-%d")
+    end_date: date = Field(format="%Y-%m-%d")

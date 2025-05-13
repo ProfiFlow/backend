@@ -105,11 +105,12 @@ app.add_middleware(
 
 app.include_router(api_router, prefix=settings.api_v1_str)
 
+
 @app.get("/")
 async def root():
     return {
         "message": settings.project_name,
         "documentation": "/docs",
         "version": "1.0.0",
-        "api_version": "v1"
+        "api_version": "v1",
     }
