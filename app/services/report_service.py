@@ -14,7 +14,6 @@ from app.schemas.team_report import (
     MetricWithComparison,
     TeamSprintReport,
 )
-from app.schemas.yandex_tracker import Sprint as SprintSchema
 from app.schemas.yandex_tracker import Task
 from app.services.yandex_gpt_service import YandexGPTMLService
 from app.services.yandex_tracker import YandexTrackerService
@@ -251,7 +250,7 @@ class ReportService:
 
         prev_sprint = None
         all_sprints = await self.yandex_tracker_service.get_sprints(current_user_id)
-        sprints_objs =  all_sprints
+        sprints_objs = all_sprints
         sprints_sorted = sorted(sprints_objs, key=lambda s: s.start_date)
         for idx, s in enumerate(sprints_sorted):
             if s.id == sprint_id and idx > 0:

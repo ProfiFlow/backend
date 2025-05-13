@@ -4,17 +4,16 @@ from typing import Any, Dict, List, Optional, Type
 
 from pydantic import BaseModel, Field, ValidationError
 from yandex_cloud_ml_sdk import AsyncYCloudML
-
 from yandex_cloud_ml_sdk._models.completions.result import Alternative, GPTModelResult
 
 from app.config import settings
 from app.schemas.sprint_report import Recommendation
-
 from app.schemas.yandex_tracker import Task
 from app.services import prompts
 from app.services.report_service import SprintStats
 
 log = logging.getLogger(__name__)
+
 
 class TextResponse(BaseModel):
     """Pydantic model for simple text responses, expecting {"text": "..."}."""
@@ -94,7 +93,7 @@ class YandexGPTMLService:
             messages.append({"role": "system", "text": system_prompt})
         messages.append({"role": "user", "text": user_prompt})
 
-        result = None 
+        result = None
         json_string = None
         try:
             configured_model = self.base_model.configure(response_format=response_model)
@@ -155,7 +154,6 @@ class YandexGPTMLService:
             raise ConnectionError(
                 f"Failed async call via Yandex GPT ML SDK: {e}{error_suffix}"
             ) from e
-
 
     async def analyze_employee_activity(
         self, tasks: list[Task], sprint_stats: SprintStats

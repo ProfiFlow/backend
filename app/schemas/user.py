@@ -58,4 +58,8 @@ class UserResponse(UserBaseResponse):
 class RoleUpdateRequest(BaseModel):
     """Схема для запроса на обновление роли пользователя"""
 
-    role: str = Field(..., description="Роль пользователя (manager или employee)", pattern="^(manager|employee)$")
+    role: str = Field(
+        ...,
+        description="Роль пользователя (manager или employee)",
+        pattern="^(manager|employee)$",
+    )
