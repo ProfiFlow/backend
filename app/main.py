@@ -83,10 +83,10 @@ def custom_openapi():
         "/openapi.json",
     ]
 
-    # Применяем security ко всем операциям
-    for path in openapi_schema["paths"].values():
-        if path not in exclude_paths:
-            for method in path.values():
+    # Применяем security ко всем операциям, кроме исключенных
+    for path_key, path_item in openapi_schema["paths"].items():
+        if path_key not in exclude_paths:
+            for method in path_item.values():
                 method.setdefault("security", [{"BearerAuth": []}])
 
     app.openapi_schema = openapi_schema
