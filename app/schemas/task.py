@@ -1,5 +1,7 @@
-from pydantic import BaseModel
 from typing import List, Optional
+
+from pydantic import BaseModel
+
 
 # Модель для данных задачи (упрощенная версия)
 class Task(BaseModel):
@@ -11,6 +13,7 @@ class Task(BaseModel):
     createdAt: str
     updatedAt: str
     sprint: Optional[List[dict]] = None
+
 
 # Модель для входящего запроса (список задач)
 class TrackerData(BaseModel):

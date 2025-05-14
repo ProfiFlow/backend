@@ -1,9 +1,11 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, BigInteger, func
-from sqlalchemy.orm import validates
-from pydantic import EmailStr
+
+from pydantic import ValidationError, validate_email
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, func
+from sqlalchemy.orm import relationship, validates
+
 from . import Base
-    
+
 
 class User(Base):
     __tablename__ = "users"
@@ -29,12 +31,7 @@ class User(Base):
     yandex_refresh_token = Column(String(500), nullable=True)
 
     # Интеграция с Яндекс.Трекером
-    tracker_id = Column(BigInteger, nullable=True)
-
-    # Уникальный идентификатор пользователя в Yandex Cloud Organization.
-    cloud_id = Column(String(50), nullable=True)
-
-    org_id = Column(String(50), nullable=True)
+    tracker_associations = relationship("UserTrackerRole", back_populates="user")
 
     # Технические поля
     created_at = Column(DateTime, server_default=func.now())
@@ -42,17 +39,23 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
 
     # Валидаторы
-    @validates('email')
-    def validate_email(self, key, email):
+    @validates("email")
+    def validate_email(self, _, email):
         if email:
-            if not EmailStr.validate(email):
+            try:
+                validate_email(email)
+            except ValidationError:
                 raise ValueError("Invalid email format")
             return email.lower()
 
     # Методы
     def get_full_name(self) -> str:
         """Возвращает полное имя пользователя"""
-        return f"{self.first_name or ''} {self.last_name or ''}".strip() or self.display_name or ""
+        return (
+            f"{self.first_name or ''} {self.last_name or ''}".strip()
+            or self.display_name
+            or ""
+        )
 
     def has_yandex_auth(self) -> bool:
         """Проверяет, привязан ли Яндекс-аккаунт"""
@@ -60,7 +63,7 @@ class User(Base):
 
     def has_tracker_access(self) -> bool:
         """Проверяет доступ к Яндекс.Трекеру"""
-        return bool(self.tracker_token)
+        return bool(self.yandex_token)
 
     def is_token_expired(self) -> bool:
         """Проверяет истек ли срок действия Яндекс-токена"""
